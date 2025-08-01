@@ -1,18 +1,18 @@
 from setuptools import setup, Extension
 
-bitweb_yespower_module = Extension('bitweb_yespower',
+y1_module = Extension('y1',
                             sources = ['yespower-module.c',
                                        'yespower.c',
                                        'yespower-opt.c',
                                        'sha256.c'
                                        ],
-                            extra_compile_args=['-O2', '-funroll-loops', '-fomit-frame-pointer'],
+                            extra_compile_args=['-O3', '-DNDEBUG', '-s', '-funroll-loops', '-fomit-frame-pointer'],
                             include_dirs=['.'])
 
-setup (name = 'bitweb_yespower',
-       version = '1.0.5',
-       author_email = 'mraksoll4@gmail.com',
-       author = 'mraksoll',
-       url = 'https://github.com/bitweb-project/bitweb_yespower_python3',
-       description = 'Bindings for yespower-1.0 proof of work used by bitweb',
-       ext_modules = [bitweb_yespower_module])
+setup (name = 'y1',
+       version = '1.0',
+       author_email = '',
+       author = '',
+       url = '',
+       description = '',
+       ext_modules = [y1_module])
