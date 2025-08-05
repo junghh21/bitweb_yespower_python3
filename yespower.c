@@ -13,7 +13,8 @@ int y1_foo2(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned in
 {
 	unsigned int *a = input;
 	unsigned int *b = output;
-	for(unsigned int i=*no;i<*no+1000;i++)
+	unsigned int i;
+	for(i=*no;i<(*no)+1000;i++)
 	{
 		a[19] = i;
 		yespower_tls((yespower_binary_t *)input, 80, &v2, (yespower_binary_t *) output);
@@ -22,9 +23,12 @@ int y1_foo2(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned in
 		{
 			*mask = b[7];  
 			*no = i;
+			//printf("%08X : %08X : %08X, %08X\n", i, *no, b[7], *mask);
 			return 0;
-		}
+		} 
 	}
+	*no = i-1;
+	//printf("%08X : %08X : %08X, %08X\n", i, *no, b[7], *mask);
 	return -1;
 }
 /*int yespower_hash(const char *input, char *output)
