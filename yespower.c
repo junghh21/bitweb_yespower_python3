@@ -14,7 +14,7 @@ int y1_foo2(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned in
 	unsigned int *a = input;
 	unsigned int *b = output;
 	unsigned int i;
-	for(i=*no;i<(*no)+1000;i++)
+	for(i=*no;i<(*no)+200;i++)
 	{
 		a[19] = i;
 		yespower_tls((yespower_binary_t *)input, 80, &v2, (yespower_binary_t *) output);
