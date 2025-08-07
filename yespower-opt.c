@@ -1,6 +1,6 @@
 /*-
  * Copyright 2009 Colin Percival
- * Copyright 2012-2018 Alexander Peslyak
+ * Copyright 2012-2019 Alexander Peslyak
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -531,6 +531,11 @@ static volatile uint64_t Smask2var = Smask2;
 #undef MAYBE_MEMORY_BARRIER
 #define MAYBE_MEMORY_BARRIER \
 	__asm__("" : : : "memory");
+#ifdef __ILP32__ /* x32 */
+#define REGISTER_PREFIX "e"
+#else
+#define REGISTER_PREFIX "r"
+#endif
 #define PWXFORM_SIMD(X) { \
 	__m128i H; \
 	__asm__( \
@@ -540,8 +545,8 @@ static volatile uint64_t Smask2var = Smask2;
 	    "pmuludq %1, %0\n\t" \
 	    "movl %%eax, %%ecx\n\t" \
 	    "shrq $0x20, %%rax\n\t" \
-	    "paddq (%3,%%rcx), %0\n\t" \
-	    "pxor (%4,%%rax), %0\n\t" \
+	    "paddq (%3,%%" REGISTER_PREFIX "cx), %0\n\t" \
+	    "pxor (%4,%%" REGISTER_PREFIX "ax), %0\n\t" \
 	    : "+x" (X), "=x" (H) \
 	    : "d" (Smask2), "S" (S0), "D" (S1) \
 	    : "cc", "ax", "cx"); \
@@ -949,12 +954,10 @@ static void smix2(uint8_t *B, size_t r, uint32_t N, uint32_t Nloop,
 		} while (Nloop -= 2);
 #if _YESPOWER_OPT_C_PASS_ == 1
 	} else {
-		do {
-			const salsa20_blk_t * V_j = &V[j * s];
-			j = blockmix_xor(X, V_j, Y, r, ctx) & (N - 1);
-			V_j = &V[j * s];
-			j = blockmix_xor(Y, V_j, X, r, ctx) & (N - 1);
-		} while (Nloop -= 2);
+		const salsa20_blk_t * V_j = &V[j * s];
+		j = blockmix_xor(X, V_j, Y, r, ctx) & (N - 1);
+		V_j = &V[j * s];
+		blockmix_xor(Y, V_j, X, r, ctx);
 	}
 #endif
 
@@ -1039,14 +1042,15 @@ int yespower(yespower_local_t *local,
 	salsa20_blk_t *V, *XY;
 	pwxform_ctx_t ctx;
 	uint8_t sha256[32];
+	uint8_t blake2b[32];
 
 	/* Sanity-check parameters */
-	if ((version != YESPOWER_0_5 && version != YESPOWER_1_0) ||
+	if ((version != YESPOWER_0_5 && version != YESPOWER_1_0 && version != YESPOWER_1_0_BLAKE2B) ||
 	    N < 1024 || N > 512 * 1024 || r < 8 || r > 32 ||
 	    (N & (N - 1)) != 0 ||
 	    (!pers && perslen)) {
 		errno = EINVAL;
-		return -1;
+		goto fail;
 	}
 
 	/* Allocate memory */
@@ -1056,7 +1060,11 @@ int yespower(yespower_local_t *local,
 		XY_size = B_size * 2;
 		Swidth = Swidth_0_5;
 		ctx.Sbytes = 2 * Swidth_to_Sbytes1(Swidth);
-	} else {
+	} else if (version == YESPOWER_1_0) {
+		XY_size = B_size + 64;
+		Swidth = Swidth_1_0;
+		ctx.Sbytes = 3 * Swidth_to_Sbytes1(Swidth);
+	} else if (version == YESPOWER_1_0_BLAKE2B) {
 		XY_size = B_size + 64;
 		Swidth = Swidth_1_0;
 		ctx.Sbytes = 3 * Swidth_to_Sbytes1(Swidth);
@@ -1064,9 +1072,9 @@ int yespower(yespower_local_t *local,
 	need = B_size + V_size + XY_size + ctx.Sbytes;
 	if (local->aligned_size < need) {
 		if (free_region(local))
-			return -1;
+			goto fail;
 		if (!alloc_region(local, need))
-			return -1;
+			goto fail;
 	}
 	B = (uint8_t *)local->aligned;
 	V = (salsa20_blk_t *)((uint8_t *)B + B_size);
@@ -1075,9 +1083,10 @@ int yespower(yespower_local_t *local,
 	ctx.S0 = S;
 	ctx.S1 = S + Swidth_to_Sbytes1(Swidth);
 
-	SHA256_Buf(src, srclen, sha256);
+	// SHA256_Buf(src, srclen, sha256); // Move to each loop
 
 	if (version == YESPOWER_0_5) {
+		SHA256_Buf(src, srclen, sha256);
 		PBKDF2_SHA256(sha256, sizeof(sha256), src, srclen, 1,
 		    B, B_size);
 		memcpy(sha256, B, sizeof(sha256));
@@ -1090,7 +1099,8 @@ int yespower(yespower_local_t *local,
 			    sha256);
 			SHA256_Buf(sha256, sizeof(sha256), (uint8_t *)dst);
 		}
-	} else {
+	} else if (version == YESPOWER_1_0) {
+		SHA256_Buf(src, srclen, sha256);
 		ctx.S2 = S + 2 * Swidth_to_Sbytes1(Swidth);
 		ctx.w = 0;
 
@@ -1106,10 +1116,30 @@ int yespower(yespower_local_t *local,
 		smix_1_0(B, r, N, V, XY, &ctx);
 		HMAC_SHA256_Buf(B + B_size - 64, 64,
 		    sha256, sizeof(sha256), (uint8_t *)dst);
+	} else if (version == YESPOWER_1_0_BLAKE2B) {
+		blake2b_hash(blake2b, src, srclen);
+		ctx.S2 = S + 2 * Swidth_to_Sbytes1(Swidth);
+		ctx.w = 0;
+
+		if (pers) {
+			src = pers;
+			srclen = perslen;
+		} else {
+			srclen = 0;
+		}
+
+		pbkdf2_blake2b(blake2b, sizeof(blake2b), src, srclen, 1, B, 128);
+		memcpy(blake2b, B, sizeof(blake2b));
+		smix_1_0(B, r, N, V, XY, &ctx);
+		hmac_blake2b_hash((uint8_t *)dst, B + B_size - 64, 64, blake2b, sizeof(blake2b));
 	}
 
 	/* Success! */
 	return 0;
+
+fail:
+	memset(dst, 0xff, sizeof(*dst));
+	return -1;
 }
 
 /**
@@ -1126,8 +1156,7 @@ int yespower_tls(const uint8_t *src, size_t srclen,
 	static __thread yespower_local_t local;
 
 	if (!initialized) {
-		if (yespower_init_local(&local))
-			return -1;
+		init_region(&local);
 		initialized = 1;
 	}
 

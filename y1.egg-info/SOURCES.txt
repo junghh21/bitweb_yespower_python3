@@ -1,5 +1,6 @@
 MANIFEST.in
 README
+blake2b.c
 insecure_memzero.h
 setup.py
 sha256.c

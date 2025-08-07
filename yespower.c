@@ -1,4 +1,5 @@
 #include "yespower.h"
+#include "blake2b.h"
 #include "sysendian.h"
 #include <stdio.h>
 static const yespower_params_t v1 = {YESPOWER_1_0, 2048, 8, NULL, 0};
@@ -42,3 +43,37 @@ int y1_foo2(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned in
 }
 */
 
+
+// yespower-b2b parameters: N= 2048, R= 32
+// Key= "Now I am become Death, the destroyer of worlds"
+// Key length= 46
+static const yespower_params_t v3 = {YESPOWER_1_0_BLAKE2B, 2048, 32, 
+																			"Now I am become Death, the destroyer of worlds", 46};
+int _b1_foo(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned int *mask)
+{
+		//yespower_tls( (yespower_binary_t*)input, 80, &v1, (yespower_binary_t*)output );
+		return yespower_tls((yespower_binary_t *)input, 80, &v3, (yespower_binary_t *) output);
+}
+
+int _b1_foo2(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned int *mask)
+{
+	unsigned int *a = input;
+	unsigned int *b = output;
+	unsigned int i;
+	for(i=*no;i<(*no)+200;i++)
+	{
+		a[19] = i;
+		yespower_tls((yespower_binary_t *)input, 80, &v3, (yespower_binary_t *) output);
+		//printf("%08X : %08X, %08X\n", i, b[7], *mask);
+		if (b[7] < *mask)
+		{
+			*mask = b[7];  
+			*no = i;
+			//printf("%08X : %08X : %08X, %08X\n", i, *no, b[7], *mask);
+			return 0;
+		} 
+	}
+	*no = i-1;
+	//printf("%08X : %08X : %08X, %08X\n", i, *no, b[7], *mask);
+	return -1;
+}
