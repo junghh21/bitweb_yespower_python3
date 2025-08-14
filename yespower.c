@@ -2,36 +2,76 @@
 #include "blake2b.h"
 #include "sysendian.h"
 #include <stdio.h>
-static const yespower_params_t v1 = {YESPOWER_1_0, 2048, 8, NULL, 0};
-static const yespower_params_t v2 = {YESPOWER_1_0, 2048, 32, NULL, 0};
-int y1_foo(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned int *mask)
-{
-		//yespower_tls( (yespower_binary_t*)input, 80, &v1, (yespower_binary_t*)output );
-		return yespower_tls((yespower_binary_t *)input, 80, &v2, (yespower_binary_t *) output);
-}
 
-int y1_foo2(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned int *mask)
+//static const yespower_params_t v1 = {YESPOWER_1_0, 2048, 8, NULL, 0};
+static const yespower_params_t v2 = {YESPOWER_1_0, 2048, 32, NULL, 0};
+// yespower-b2b parameters: N= 2048, R= 32
+// Key= "Now I am become Death, the destroyer of worlds"
+// Key length= 46
+static const yespower_params_t v3 = {YESPOWER_1_0_BLAKE2B, 2048, 32, 
+																			"Now I am become Death, the destroyer of worlds", 46};
+typedef struct
 {
-	unsigned int *a = input;
-	unsigned int *b = output;
+	unsigned int algo;
+	unsigned int job_id;
+	unsigned char bin[80];
+	unsigned int mask;
+	unsigned int count;
+} input_t;
+
+typedef struct
+{
+	unsigned int algo;
+	unsigned int job_id;
+	unsigned char bin[32];
+	unsigned int mask;
+} output_t;
+
+int y1_foo(const input_t *input, output_t *output, unsigned int *no)
+{
+	unsigned int *a = (unsigned int *)input->bin;
+	unsigned int *b = (unsigned int *)output->bin;
+	unsigned int *mask = &(output->mask);
 	unsigned int i;
-	for(i=*no;i<(*no)+200;i++)
+	output->mask = input->mask;
+	output->algo = input->algo;
+	output->job_id = input->job_id;
+	yespower_params_t *yes_param = &v2;
+	if (input->algo == YESPOWER_1_0)
+	{
+	 	yes_param = &v2;
+	}
+	if (input->algo == YESPOWER_1_0_BLAKE2B)
+	{
+	 	yes_param = &v3;
+	}
+	// printf("%08X, %d, %08X, %d\n"
+	// 				, output->mask, output->algo, output->job_id, input->count);
+	// printf("%08X %08X %08X %08X\n"
+	// 				, a[0], a[1], a[18], a[19]);
+	for(i=*no; i<=*no+input->count-1; i++)
 	{
 		a[19] = i;
-		yespower_tls((yespower_binary_t *)input, 80, &v2, (yespower_binary_t *) output);
+		yespower_tls((const uint8_t *)a, 80, yes_param, (yespower_binary_t *)b);
 		//printf("%08X : %08X, %08X\n", i, b[7], *mask);
 		if (b[7] < *mask)
 		{
-			*mask = b[7];  
-			*no = i;
 			//printf("%08X : %08X : %08X, %08X\n", i, *no, b[7], *mask);
+			*mask = b[7]; 
+			*no = i;
 			return 0;
 		} 
 	}
-	*no = i-1;
 	//printf("%08X : %08X : %08X, %08X\n", i, *no, b[7], *mask);
+	*no = i;
 	return -1;
 }
+
+
+
+
+
+
 /*int yespower_hash(const char *input, char *output)
 {
 	uint32_t time = le32dec(&input[68]);
@@ -41,14 +81,15 @@ int y1_foo2(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned in
 		return yespower_tls(input, 80, &v2, (yespower_binary_t *) output);
 	}
 }
-*/
 
 
-// yespower-b2b parameters: N= 2048, R= 32
-// Key= "Now I am become Death, the destroyer of worlds"
-// Key length= 46
-static const yespower_params_t v3 = {YESPOWER_1_0_BLAKE2B, 2048, 32, 
-																			"Now I am become Death, the destroyer of worlds", 46};
+int y1_foo(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned int *mask)
+{
+		//yespower_tls( (yespower_binary_t*)input, 80, &v1, (yespower_binary_t*)output );
+		return yespower_tls((yespower_binary_t *)input, 80, &v2, (yespower_binary_t *) output);
+}
+
+
 int _b1_foo(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned int *mask)
 {
 		//yespower_tls( (yespower_binary_t*)input, 80, &v1, (yespower_binary_t*)output );
@@ -77,3 +118,4 @@ int _b1_foo2(const uint8_t *input, uint8_t *output, unsigned int *no, unsigned i
 	//printf("%08X : %08X : %08X, %08X\n", i, *no, b[7], *mask);
 	return -1;
 }
+*/
